@@ -1,0 +1,4 @@
+.vscode/
+__local__/
+__tests__/
+__pycache__/
