@@ -1,5 +1,7 @@
 import setuptools
 
+import netbucket
+netbucket.server
 version = {
     "year" :2025,
     "minor" :0,

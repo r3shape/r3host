@@ -238,7 +238,7 @@ class NBserver:
 
 
 if __name__ == "__main__":
-    server = NBserver("Spider-Web")
+    server = NBserver("The Server")
 
     def scream_callback(payload: str) -> None:
         server.log_stdout("SCREAMING CALLBACK")

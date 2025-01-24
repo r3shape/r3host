@@ -1,6 +1,5 @@
 """
 netbucket - network programming made simple
 """
-
-from .NBserver import *
-from .NBclient import *
+import netbucket.client as client
+import netbucket.server as server

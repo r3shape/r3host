@@ -117,8 +117,8 @@ class NBclient:
                 with self.thread_lock:
                     self.connected = False
 
-                self.socket.close()
                 self.read_thread.join(timeout=2.0)
+                self.socket.close()
                 
                 self.address = None
                 self.server_address = None
@@ -132,7 +132,9 @@ class NBclient:
                 if self.connected:
                     raw_message = input(">: ").strip()
                     if raw_message: self.write_message(self.build_message(raw_message))
-        except Exception as e: self.log_stdout(f"run exception: {e}")
+        except Exception as e:
+            self.log_stdout(f"run exception: {e}")
+            self.shutdown()
 
     def shutdown(self) -> None:
         if self.running:
@@ -142,7 +144,7 @@ class NBclient:
             self.log_stdout("shut down")
 
 if __name__ == "__main__":
-    client = NBclient("mikeman123")
+    client = NBclient("HappyMaxDriver")
     client.connect()
     client.run()
     client.shutdown()
