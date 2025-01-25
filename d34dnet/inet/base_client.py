@@ -7,7 +7,7 @@ class BaseClient:
         }
         self.encoding: str = "utf-8"
         self.address: tuple[str, int] = None
-        self.read_tread: threading.Thread = None
+        self.read_thread: threading.Thread = None
         self.thread_lock: threading.Lock = threading.Lock()
         self.endpoint: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
