@@ -1,4 +1,4 @@
-import json, socket, selectors
+import os, signal, json, socket, selectors
 from collections import defaultdict
 
 class BaseServer:
@@ -78,6 +78,12 @@ class BaseServer:
             if request:
                 self.log_stdout(f"request: {request} ({len(request)} bytes)")
                 self.on_read(endpoint, request)
+        except ConnectionError as e:
+            self.log_stdout(f"bad gateway: {address}")
+            self._handle_disconnect(endpoint)
+        except KeyboardInterrupt as e:
+            self.log_stdout(f"runtime exception: {e}")
+            self.stop()
         except Exception as e:
             self.log_stdout(f"server read exception: {e}")
 
@@ -91,6 +97,12 @@ class BaseServer:
                 sent += endpoint.send(encoded[sent:1024])
             self.log_stdout(f"response: {response}({sent} bytes)")
             self.on_write(endpoint, response)
+        except ConnectionError as e:
+            self.log_stdout(f"bad gateway: {address}")
+            self._handle_disconnect(endpoint)
+        except KeyboardInterrupt as e:
+            self.log_stdout(f"runtime exception: {e}")
+            self.stop()
         except Exception as e:
             self.log_stdout(f"client write exception: {e}")
             return 0
@@ -146,13 +158,20 @@ class BaseServer:
             self.log_stdout(f"connected: {address}")
 
     def _service_connection(self, endpoint: socket.socket, mask: int) -> None:
-        address = endpoint.getpeername()
-        if (mask & selectors.EVENT_READ) == selectors.EVENT_READ:
-            self.read(endpoint)
-        
-        if (mask & selectors.EVENT_WRITE) == selectors.EVENT_WRITE:
-            if self._has_responses(address):
-                self.write(endpoint)
+        try:
+            address = endpoint.getpeername()
+            if (mask & selectors.EVENT_READ) == selectors.EVENT_READ:
+                self.read(endpoint)
+            
+            if (mask & selectors.EVENT_WRITE) == selectors.EVENT_WRITE:
+                if self._has_responses(address):
+                    self.write(endpoint)
+        except ConnectionError as e:
+            self.log_stdout(f"bad gateway: {address}")
+            self._handle_disconnect(endpoint)
+        except KeyboardInterrupt as e:
+            self.log_stdout(f"runtime exception: {e}")
+            self.stop()
 
     def _handle_disconnect(self, endpoint: socket.socket) -> None:
         try:
@@ -181,13 +200,20 @@ class BaseServer:
 
     def run(self) -> None:
         while self.get_state("running") == True:
-            selection = self.selector.select(timeout=None)
-            for key, mask in selection:
-                if callable(key.data):
-                    callback = key.data
-                    endpoint = key.fileobj
-                    callback(endpoint, mask)   # handle/service_connection() callback
-                else: break
+            try:
+                selection = self.selector.select(timeout=None)
+                for key, mask in selection:
+                    if callable(key.data):
+                        callback = key.data
+                        endpoint = key.fileobj
+                        callback(endpoint, mask)   # handle/service_connection() callback
+                    else: break
+            except ConnectionError as e:
+                self.log_stdout(f"bad gateway: {self.address}")
+                self.stop()
+            except KeyboardInterrupt as e:
+                self.log_stdout(f"runtime exception: {e}")
+                self.stop()
     
     def stop(self) -> None:
         try:
@@ -195,17 +221,16 @@ class BaseServer:
             for address in self.connections:
                 endpoint = self.connections[address]["endpoint"]
                 endpoint.close()
-            del self.methods
-            del self.connections
             self.selector.close()
             self.endpoint.close()
-        except Exception as e: self.log_stdout(f"failed to gracefully shutdown")
+            os.kill(os.getpid(), signal.SIGINT)
+        except Exception as e: self.log_stdout(f"failed to gracefully shutdown: {e}")
 
     """ server hooks """
     def on_read(self, endpoint: socket.socket, request: dict):
         """
         a subclassed `BaseServer` should implement this callback
-        to provide a layer of custom logic after a server read is complete.
+        to provide a layer of custom logic after a server read is complete. (the request read, is passed into this function)
         
         a subclassed `BaseServer` can still call the superclass's implementation,
         as by default this method is used for parsing the request and calling corresponding server methods.
@@ -232,7 +257,7 @@ class BaseServer:
     def on_write(self, endpoint: socket.socket, response: dict):
         """
         a subclassed `BaseServer` should implement this callback
-        to provide a layer of custom logic after a server write is complete
+        to provide a layer of custom logic after a server write is complete. (the response written, is passed into this function)
 
         by default, this method does nothing.
 

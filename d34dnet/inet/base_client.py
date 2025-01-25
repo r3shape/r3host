@@ -70,13 +70,16 @@ class BaseClient:
     """ external client API """
     def connect(self, ip: str="127.0.0.1", port: int=8080) -> None:
         if self.get_state("connected") == False:
-            self.address = (ip, port)
-            self.endpoint.connect(self.address)
-            self.read_tread = threading.Thread(target=self._read, daemon=True)
-            self.set_state("connected", True)
-            self.read_tread.start()
-            self.on_connect()
-            self.log_stdout(f"connected to: {self.address}")
+            try:
+                self.address = (ip, port)
+                self.endpoint.connect(self.address)
+                self.read_tread = threading.Thread(target=self._read, daemon=True)
+                self.set_state("connected", True)
+                self.read_tread.start()
+                self.on_connect()
+                self.log_stdout(f"connected to: {self.address}")
+            except ConnectionError as e:
+                self.log_stdout(f"connection failed: {self.address}")
     
     def reconnect(self):
         if self.address:
@@ -98,7 +101,7 @@ class BaseClient:
             self.endpoint.close()
             self.set_state("connected", False)
             self.log_stdout(f"disconnected from: {self.address}")
-            os.kill(os.getpid(), signal.SIGINT)
+        finally: os.kill(os.getpid(), signal.SIGINT)
 
     def run(self) -> None:
         while self.get_state("connected") == True:
