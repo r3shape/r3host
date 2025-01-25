@@ -74,6 +74,7 @@ class BaseServer:
         try:
             address = endpoint.getpeername()
             request = json.loads(endpoint.recv(1024).decode(self.encoding))
+            request["params"] = json.loads(request["params"])   # de-serialize parameters incase of object-params
             if request:
                 self.log_stdout(f"request: {request} ({len(request)} bytes)")
                 self.on_read(endpoint, request)
