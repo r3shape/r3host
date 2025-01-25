@@ -35,8 +35,8 @@ class BaseServer:
             return
 
     """ server I/O """
-    def _build_response(self, method: str, params: list|dict) -> dict:
-        return {"jsonrpc": "2.0", "method": method, "params": params}
+    def build_response(self, method: str, params: list|dict) -> dict:
+        return {"jsonrpc": "2.0", "method": method, "params": json.dumps(params)}   # serialize response parameters in case of object-params
 
     def _has_responses(self, address: tuple[str, int]) -> bool:
         try:
@@ -70,7 +70,7 @@ class BaseServer:
             self.log_stdout(f"endpoint address not found: {address}")
             return {"NONE"}
 
-    def _read(self, endpoint: socket.socket) -> None:
+    def read(self, endpoint: socket.socket) -> None:
         try:
             address = endpoint.getpeername()
             request = json.loads(endpoint.recv(1024).decode(self.encoding))
@@ -78,9 +78,10 @@ class BaseServer:
             if request:
                 self.log_stdout(f"request: {request} ({len(request)} bytes)")
                 self.on_read(endpoint, request)
-        except Exception as e: self.log_stdout(f"server read exception: {e}")
+        except Exception as e:
+            self.log_stdout(f"server read exception: {e}")
 
-    def _write(self, endpoint: socket.socket) -> int:
+    def write(self, endpoint: socket.socket) -> int:
         try:
             sent = 0
             address = endpoint.getpeername()
@@ -147,11 +148,11 @@ class BaseServer:
     def _service_connection(self, endpoint: socket.socket, mask: int) -> None:
         address = endpoint.getpeername()
         if (mask & selectors.EVENT_READ) == selectors.EVENT_READ:
-            self._read(endpoint)
+            self.read(endpoint)
         
         if (mask & selectors.EVENT_WRITE) == selectors.EVENT_WRITE:
             if self._has_responses(address):
-                self._write(endpoint)
+                self.write(endpoint)
 
     def _handle_disconnect(self, endpoint: socket.socket) -> None:
         try:
@@ -222,10 +223,10 @@ class BaseServer:
                     method(endpoint, request)
                     self.log_stdout(f"server method called: {request["method"]}")
             else: 
-                self.queue_response(endpoint.getpeername(), self._build_response("error", f"invalid server method: {request["method"]}"))
+                self.queue_response(endpoint.getpeername(), self.build_response("error", f"invalid server method: {request["method"]}"))
                 self.log_stdout(f"invalid server method call from: {endpoint.getpeername()} | {request["method"]}")
         except KeyError as e:
-            self.queue_response(endpoint.getpeername(), self._build_response("error", f"invalid server method: {request["method"]}"))
+            self.queue_response(endpoint.getpeername(), self.build_response("error", f"invalid server method: {request["method"]}"))
             self.log_stdout(f"invalid server method call from: {endpoint.getpeername()} | {request["method"]}")
 
     def on_write(self, endpoint: socket.socket, response: dict):

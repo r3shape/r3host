@@ -33,11 +33,12 @@ class BaseClient:
     def build_request(self, method: str, params: list|dict) -> dict:
         return {"jsonrpc": "2.0", "method": method, "params": json.dumps(params)}    # serialize request parameters in case of object-params
 
-    def _read(self) -> dict:
+    def _read(self) -> None:
         if self.get_state("connected") == True:
             while self.get_state("connected") == True:
                 try:
                     response = json.loads(self.endpoint.recv(1024).decode(self.encoding))
+                    response["params"] = json.loads(response["params"])   # de-serialize parameters incase of object-params
                     if response:
                         self.log_stdout(f"response recv: {response}")
                         self.on_read(response)
@@ -50,7 +51,7 @@ class BaseClient:
                     self.log_stdout(f"client read exception: {e}")
                     self.disconnect()
 
-    def _write(self, request: dict) -> int:
+    def write(self, request: dict) -> int:
         if self.get_state("connected") == True:
             try:
                 sent = 0
@@ -105,7 +106,7 @@ class BaseClient:
                 method = input("(request method) >: ")
                 params = input("(request params) >: ")
                 request = self.build_request(method, params)
-                if request: self._write(request)
+                if request: self.write(request)
             except KeyboardInterrupt:
                 self.disconnect()
             except Exception as e:
