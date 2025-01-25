@@ -142,7 +142,7 @@ class BaseServer:
             )
             
             self.on_connect(client)
-            self.log_stdout(f"incoming connection: {address}")
+            self.log_stdout(f"connected: {address}")
 
     def _service_connection(self, endpoint: socket.socket, mask: int) -> None:
         address = endpoint.getpeername()
