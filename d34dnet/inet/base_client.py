@@ -9,7 +9,7 @@ class BaseClient:
         self.address: tuple[str, int] = None
         self.read_tread: threading.Thread = None
         self.thread_lock: threading.Lock = threading.Lock()
-        self.transport: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.endpoint: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def log_stdout(self, message: str) -> None:
         print(f"[client-log] | {message}\n")
@@ -36,7 +36,7 @@ class BaseClient:
     def _read(self) -> dict:
         while self.get_state("connected") == True:
             try:
-                response = json.loads(self.transport.recv(1024).decode(self.encoding))
+                response = json.loads(self.endpoint.recv(1024).decode(self.encoding))
                 if response: self.log_stdout(f"response recv: {response}")
             except (json.JSONDecodeError, ConnectionError) as e:
                 self.log_stdout(f"connection error: {self.address}")
@@ -52,7 +52,7 @@ class BaseClient:
             sent = 0
             encoded = json.dumps(request).encode(self.encoding)
             while sent < len(encoded):
-                sent += self.transport.send(encoded[sent:1024])
+                sent += self.endpoint.send(encoded[sent:1024])
             return sent
         except ConnectionError as e:
             self.log_stdout(f"connection error: {self.address}")
@@ -65,7 +65,7 @@ class BaseClient:
     def connect(self, ip: str="127.0.0.1", port: int=8080) -> None:
         if self.get_state("connected") == False:
             self.address = (ip, port)
-            self.transport.connect(self.address)
+            self.endpoint.connect(self.address)
             self.read_tread = threading.Thread(target=self._read, daemon=True)
             self.set_state("connected", True)
             self.read_tread.start()
@@ -83,11 +83,11 @@ class BaseClient:
             if self.get_state("connected") == True:
                 self.set_state("connected", False)
                 self.read_tread.join(timeout=1.0)
-                self.transport.close()
+                self.endpoint.close()
                 self.log_stdout(f"disconnected from: {self.address}")
         except (RuntimeError, RuntimeWarning) as e:
             self.log_stdout(f"runtime error: {e}")
-            self.transport.close()
+            self.endpoint.close()
             self.set_state("connected", False)
             self.log_stdout(f"disconnected from: {self.address}")
             os.kill(os.getpid(), signal.SIGINT)
@@ -129,9 +129,3 @@ class BaseClient:
         this method is a no-op default. a `BaseClient` subclass must implement
         this method for extended client-side logic
         """
-
-
-""" standalone example """
-c = BaseClient()
-c.connect()
-c.run()

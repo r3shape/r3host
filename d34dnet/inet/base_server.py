@@ -11,7 +11,7 @@ class BaseServer:
         self.methods: dict = defaultdict(dict)
         self.connections: dict = defaultdict(dict)
         self.selector: selectors.DefaultSelector = selectors.DefaultSelector()
-        self.transport: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.endpoint: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # Automatically register methods marked with @server_method
         self._auto_register_methods()
@@ -42,53 +42,53 @@ class BaseServer:
         try:
             if not self.connections[address]["responses"]:
                 self.selector.modify(
-                    self.connections[address]["transport"],
+                    self.connections[address]["endpoint"],
                     selectors.EVENT_READ,
                     self._service_connection
                 )
                 return False
             return True
         except KeyError as e:
-            self.log_stdout(f"transport address not found: {address}")
+            self.log_stdout(f"endpoint address not found: {address}")
             return False
 
     def queue_response(self, address: tuple[str, int], response: dict) -> None:
         try:
             self.connections[address]["responses"].append(response)
             self.selector.modify(
-                    self.connections[address]["transport"],
+                    self.connections[address]["endpoint"],
                     selectors.EVENT_READ | selectors.EVENT_WRITE,
                     self._service_connection
                 )
         except KeyError as e:
-            self.log_stdout(f"transport address not found: {address}")
+            self.log_stdout(f"endpoint address not found: {address}")
     
     def dequeue_response(self, address: tuple[str, int]) -> None:
         try:
             return self.connections[address]["responses"].pop(0)
         except KeyError as e:
-            self.log_stdout(f"transport address not found: {address}")
+            self.log_stdout(f"endpoint address not found: {address}")
             return {"NONE"}
 
-    def _read(self, transport: socket.socket) -> None:
+    def _read(self, endpoint: socket.socket) -> None:
         try:
-            address = transport.getpeername()
-            request = json.loads(transport.recv(1024).decode(self.encoding))
+            address = endpoint.getpeername()
+            request = json.loads(endpoint.recv(1024).decode(self.encoding))
             if request:
-                self.log_stdout(f"request recv: {request}")
-                self.on_read(transport, request)
+                self.log_stdout(f"request: {request} ({len(request)} bytes)")
+                self.on_read(endpoint, request)
         except Exception as e: self.log_stdout(f"server read exception: {e}")
 
-    def _write(self, transport: socket.socket) -> int:
+    def _write(self, endpoint: socket.socket) -> int:
         try:
             sent = 0
-            address = transport.getpeername()
+            address = endpoint.getpeername()
             response = self.dequeue_response(address)
             encoded = json.dumps(response).encode(self.encoding)
             while sent < len(encoded):
-                sent += transport.send(encoded[sent:1024])
-            self.log_stdout(f"response written: {response}({sent}bytes)")
-            self.on_write(transport, response)
+                sent += endpoint.send(encoded[sent:1024])
+            self.log_stdout(f"response: {response}({sent} bytes)")
+            self.on_write(endpoint, response)
         except Exception as e:
             self.log_stdout(f"client write exception: {e}")
             return 0
@@ -123,15 +123,15 @@ class BaseServer:
         except Exception as e: self.log_stdout(f"failed to unregister method: {name} | {e}")
 
     """ internal server API """
-    def _handle_connection(self, transport: socket.socket, mask: int) -> None:
-        client, address = transport.accept()
+    def _handle_connection(self, endpoint: socket.socket, mask: int) -> None:
+        client, address = endpoint.accept()
         if client is not None:
             self.log_stdout(f"incoming connection: {address}")
             
             client.setblocking(False)
             self.connections[address] = {
                 "responses": [],
-                "transport": client
+                "endpoint": client
             }
             
             self.selector.register(
@@ -140,33 +140,33 @@ class BaseServer:
                 self._service_connection
             )
 
-    def _service_connection(self, transport: socket.socket, mask: int) -> None:
-        address = transport.getpeername()
+    def _service_connection(self, endpoint: socket.socket, mask: int) -> None:
+        address = endpoint.getpeername()
         if (mask & selectors.EVENT_READ) == selectors.EVENT_READ:
-            self._read(transport)
+            self._read(endpoint)
         
         if (mask & selectors.EVENT_WRITE) == selectors.EVENT_WRITE:
             if self._has_responses(address):
-                self._write(transport)
+                self._write(endpoint)
 
-    def _handle_disconnect(self, transport: socket.socket) -> None:
+    def _handle_disconnect(self, endpoint: socket.socket) -> None:
         try:
-            address = transport.getpeername()
+            address = endpoint.getpeername()
             self.connections.pop(address)
-            self.selector.unregister(transport)
-            transport.close()
+            self.selector.unregister(endpoint)
+            endpoint.close()
             self.log_stdout(f"disconnected: {address}")
         except Exception as e: self.log_stdout(f"failed to gracefully disconnect: {address} | {e}")
 
     """ external server API """
     def start(self) -> None:
         if self.get_state("running") == False:
-            self.transport.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # allows server socket to be 're-bound'
-            self.transport.setblocking(False)
-            self.transport.bind(self.address)
-            self.transport.listen()
+            self.endpoint.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # allows server socket to be 're-bound'
+            self.endpoint.setblocking(False)
+            self.endpoint.bind(self.address)
+            self.endpoint.listen()
             self.selector.register(
-                self.transport,
+                self.endpoint,
                 selectors.EVENT_READ,
                 self._handle_connection
             )
@@ -179,24 +179,24 @@ class BaseServer:
             for key, mask in selection:
                 if callable(key.data):
                     callback = key.data
-                    transport = key.fileobj
-                    callback(transport, mask)   # handle/service_connection() callback
+                    endpoint = key.fileobj
+                    callback(endpoint, mask)   # handle/service_connection() callback
                 else: break
     
     def stop(self) -> None:
         try:
             self.set_state("running", False)
             for address in self.connections:
-                transport = self.connections[address]["transport"]
-                transport.close()
+                endpoint = self.connections[address]["endpoint"]
+                endpoint.close()
             del self.methods
             del self.connections
             self.selector.close()
-            self.transport.close()
+            self.endpoint.close()
         except Exception as e: self.log_stdout(f"failed to gracefully shutdown")
 
     """ server hooks """
-    def on_read(self, transport: socket.socket, request: dict):
+    def on_read(self, endpoint: socket.socket, request: dict):
         """
         a subclassed `BaseServer` should implement this callback
         to provide a layer of custom logic after a server read is complete.
@@ -204,7 +204,7 @@ class BaseServer:
         a subclassed `BaseServer` can still call the superclass's implementation,
         as by default this method is used for parsing the request and calling corresponding server methods.
         
-        @param: transport
+        @param: endpoint
             - the endpoint read from
         
         @param: request
@@ -214,46 +214,37 @@ class BaseServer:
             if self.methods.get(request["method"], False) != False:
                 method = self.methods[request["method"]]
                 if callable(method):
-                    method(transport, request)
+                    method(endpoint, request)
                     self.log_stdout(f"server method called: {request["method"]}")
             else: 
-                self.queue_response(transport.getpeername(), self._build_response("error", f"invalid server method: {request["method"]}"))
-                self.log_stdout(f"invalid server method call from: {transport.getpeername()} | {request["method"]}")
+                self.queue_response(endpoint.getpeername(), self._build_response("error", f"invalid server method: {request["method"]}"))
+                self.log_stdout(f"invalid server method call from: {endpoint.getpeername()} | {request["method"]}")
         except KeyError as e:
-            self.queue_response(transport.getpeername(), self._build_response("error", f"invalid server method: {request["method"]}"))
-            self.log_stdout(f"invalid server method call from: {transport.getpeername()} | {request["method"]}")
+            self.queue_response(endpoint.getpeername(), self._build_response("error", f"invalid server method: {request["method"]}"))
+            self.log_stdout(f"invalid server method call from: {endpoint.getpeername()} | {request["method"]}")
 
-    def on_write(self, transport: socket.socket, response: dict):
+    def on_write(self, endpoint: socket.socket, response: dict):
         """
         a subclassed `BaseServer` should implement this callback
         to provide a layer of custom logic after a server write is complete
 
         by default, this method does nothing.
 
-        @param: transport
+        @param: endpoint
             - the endpoint written to
         
         @param: response
             - the response written
         """
 
-    def on_connect(self, transport: socket.socket):
+    def on_connect(self, endpoint: socket.socket):
         """
         this method is a no-op default. a `BaseServer` subclass must implement
         this method for extended server-side logic
         """
 
-    def on_disconnect(self, transport: socket.socket):
+    def on_disconnect(self, endpoint: socket.socket):
         """
         this method is a no-op default. a `BaseServer` subclass must implement
         this method for extended server-side logic
         """
-
-
-""" standalone example """
-s = BaseServer()
-s.register_method("dc", lambda t, r: s._handle_disconnect(t))
-s.register_method("echo", lambda t, r: s.queue_response(t.getpeername(), r))
-s.start()
-s.run()
-s.stop()
