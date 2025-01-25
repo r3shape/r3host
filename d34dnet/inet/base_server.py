@@ -140,6 +140,9 @@ class BaseServer:
                 selectors.EVENT_READ,
                 self._service_connection
             )
+            
+            self.on_connect(client)
+            self.log_stdout(f"incoming connection: {address}")
 
     def _service_connection(self, endpoint: socket.socket, mask: int) -> None:
         address = endpoint.getpeername()
@@ -156,6 +159,7 @@ class BaseServer:
             self.connections.pop(address)
             self.selector.unregister(endpoint)
             endpoint.close()
+            self.on_disconnect(endpoint)
             self.log_stdout(f"disconnected: {address}")
         except Exception as e: self.log_stdout(f"failed to gracefully disconnect: {address} | {e}")
 

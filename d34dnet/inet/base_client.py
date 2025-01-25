@@ -31,35 +31,40 @@ class BaseClient:
 
     """ client I/O """
     def build_request(self, method: str, params: list|dict) -> dict:
-        return {"jsonrpc": "2.0", "method": method, "params": params}
+        return {"jsonrpc": "2.0", "method": method, "params": json.dumps(params)}    # serialize request parameters in case of object-params
 
     def _read(self) -> dict:
-        while self.get_state("connected") == True:
-            try:
-                response = json.loads(self.endpoint.recv(1024).decode(self.encoding))
-                if response: self.log_stdout(f"response recv: {response}")
-            except (json.JSONDecodeError, ConnectionError) as e:
-                self.log_stdout(f"connection error: {self.address}")
-                self.disconnect()
-            except KeyboardInterrupt:
-                self.disconnect()
-            except Exception as e:
-                self.log_stdout(f"client read exception: {e}")
-                self.disconnect()
+        if self.get_state("connected") == True:
+            while self.get_state("connected") == True:
+                try:
+                    response = json.loads(self.endpoint.recv(1024).decode(self.encoding))
+                    if response:
+                        self.log_stdout(f"response recv: {response}")
+                        self.on_read(response)
+                except (json.JSONDecodeError, ConnectionError) as e:
+                    self.log_stdout(f"connection error: {self.address}")
+                    self.disconnect()
+                except KeyboardInterrupt:
+                    self.disconnect()
+                except Exception as e:
+                    self.log_stdout(f"client read exception: {e}")
+                    self.disconnect()
 
     def _write(self, request: dict) -> int:
-        try:
-            sent = 0
-            encoded = json.dumps(request).encode(self.encoding)
-            while sent < len(encoded):
-                sent += self.endpoint.send(encoded[sent:1024])
-            return sent
-        except ConnectionError as e:
-            self.log_stdout(f"connection error: {self.address}")
-            self.disconnect()
-        except Exception as e:
-            self.log_stdout(f"client write exception: {e}")
-            return 0
+        if self.get_state("connected") == True:
+            try:
+                sent = 0
+                encoded = json.dumps(request).encode(self.encoding)
+                while sent < len(encoded):
+                    sent += self.endpoint.send(encoded[sent:1024])
+                self.on_write(request)
+                return sent
+            except ConnectionError as e:
+                self.log_stdout(f"connection error: {self.address}")
+                self.disconnect()
+            except Exception as e:
+                self.log_stdout(f"client write exception: {e}")
+                return 0
 
     """ external client API """
     def connect(self, ip: str="127.0.0.1", port: int=8080) -> None:
@@ -69,6 +74,7 @@ class BaseClient:
             self.read_tread = threading.Thread(target=self._read, daemon=True)
             self.set_state("connected", True)
             self.read_tread.start()
+            self.on_connect()
             self.log_stdout(f"connected to: {self.address}")
     
     def reconnect(self):
@@ -84,6 +90,7 @@ class BaseClient:
                 self.set_state("connected", False)
                 self.read_tread.join(timeout=1.0)
                 self.endpoint.close()
+                self.on_disconnect()
                 self.log_stdout(f"disconnected from: {self.address}")
         except (RuntimeError, RuntimeWarning) as e:
             self.log_stdout(f"runtime error: {e}")
