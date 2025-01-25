@@ -1,5 +1,5 @@
 """
 event based network programming 
 """
-import d34dnet.client as client
-import d34dnet.server as server
+import d34dnet.inet as inet
+import d34dnet.iweb as iweb
