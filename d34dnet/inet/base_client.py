@@ -3,7 +3,8 @@ import os, signal, json, socket, threading
 class BaseClient:
     def __init__(self):
         self.state: dict = {
-            "connected": False
+            "connected": False,
+            "log-stdout": True,
         }
         self.encoding: str = "utf-8"
         self.address: tuple[str, int] = None
@@ -12,7 +13,8 @@ class BaseClient:
         self.endpoint: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def log_stdout(self, message: str) -> None:
-        print(f"[client-log] | {message}\n")
+        if self.state["log-stdout"] == True:
+            print(f"[client-log] | {message}\n")
 
     """ client state """
     def get_state(self, state_key: str):
@@ -91,10 +93,10 @@ class BaseClient:
     def disconnect(self) -> None:
         try:
             if self.get_state("connected") == True:
+                self.on_disconnect()
                 self.set_state("connected", False)
                 self.read_tread.join(timeout=1.0)
                 self.endpoint.close()
-                self.on_disconnect()
                 self.log_stdout(f"disconnected from: {self.address}")
         except (RuntimeError, RuntimeWarning) as e:
             self.log_stdout(f"runtime error: {e}")

@@ -4,7 +4,8 @@ from collections import defaultdict
 class BaseServer:
     def __init__(self, ip: str="127.0.0.1", port: int=8080) -> None:
         self.state: dict = {
-            "running": False
+            "running": False,
+            "log-stdout": True,
         }
         self.encoding: str = "utf-8"
         self.address: tuple[str, int] = (ip, port)
@@ -17,7 +18,8 @@ class BaseServer:
         self._auto_register_methods()
 
     def log_stdout(self, message: str) -> None:
-        print(f"[server-log] | {message}\n")
+        if self.state["log-stdout"] == True:
+            print(f"[server-log] | {message}\n")
 
     """ server state """
     def get_state(self, state_key: str):
@@ -176,7 +178,9 @@ class BaseServer:
     def _handle_disconnect(self, endpoint: socket.socket) -> None:
         try:
             address = endpoint.getpeername()
-            self.connections.pop(address)
+            try:
+                self.connections.pop(address)
+            except KeyError: pass
             self.selector.unregister(endpoint)
             endpoint.close()
             self.on_disconnect(endpoint)
@@ -219,8 +223,10 @@ class BaseServer:
         try:
             self.set_state("running", False)
             for address in self.connections:
-                endpoint = self.connections[address]["endpoint"]
-                endpoint.close()
+                try:
+                    endpoint = self.connections[address]["endpoint"]
+                    endpoint.close()
+                except KeyError as e: continue
             self.selector.close()
             self.endpoint.close()
             os.kill(os.getpid(), signal.SIGINT)
