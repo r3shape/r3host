@@ -1,2 +1,2 @@
-from d34dnet.inet.tcp.server import TCPServer
-from d34dnet.inet.tcp.client import TCPClient
+from d34dnet.inet.TCP.server import TCPServer
+from d34dnet.inet.TCP.client import TCPClient
