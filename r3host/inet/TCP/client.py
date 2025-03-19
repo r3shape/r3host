@@ -1,4 +1,4 @@
-from d34dnet.inet.base_client import BaseClient
+from r3host.inet.base_client import BaseClient
 
 class TCPClient(BaseClient):
     def __init__(self):

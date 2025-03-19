@@ -1,4 +1,4 @@
-import d34dnet as dnet
+import r3host as dnet
 
 s = dnet.inet.BaseServer()
 s.register_method("dc", lambda t, r: s._handle_disconnect(t))

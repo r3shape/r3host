@@ -3,14 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "d34dnet"
-version = "2025.1.0"
+name = "r3host"
+version = "2025.0.1"
 authors = [
-  { name="Izaiyah Stokes", email="d34d.dev@gmail.com" },
+  { name="Izaiyah Stokes", email="d34d0s.dev@gmail.com" },
 ]
 readme = "README.md"
 requires-python = ">=3.7"
-description = "event based network programming"
+description = "event driven network programming"
 classifiers = [
   "Programming Language :: Python :: 3",
   "License :: OSI Approved :: MIT License",
@@ -18,8 +18,8 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/d34d0s/d34dnet"
-"Suggestions and bugs" = "https://github.com/d34d0s/d34dnet/issues"
+"Homepage" = "https://github.com/r3shape/r3host"
+"Suggestions and bugs" = "https://github.com/r3shape/r3host/issues"
 
 [tool.hatch.build.targets.sdist]
 exclude = [

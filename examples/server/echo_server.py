@@ -1,4 +1,4 @@
-import d34dnet as dnet
+import r3host as dnet
 
 class MyServer(dnet.inet.BaseServer):
     @dnet.inet.BaseServer.server_method

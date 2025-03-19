@@ -1,4 +1,4 @@
-import d34dnet as dnet
+import r3host as dnet
 
 c = dnet.inet.BaseClient()
 c.connect()
